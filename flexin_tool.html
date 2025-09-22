@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>@Flexin Tool — Digit Matches Scanner</title>
+  <style>
+    :root{--bg:#0f172a;--card:#111827;--muted:#9ca3af;--accent:#f97316;--glass:rgba(255,255,255,0.03)}
+    body{font-family:Inter, system-ui, -apple-system, Roboto, 'Segoe UI', Arial; background:linear-gradient(180deg,#071025, #071429); color:#e6eef8; margin:0; padding:24px;}
+    .container{max-width:980px;margin:0 auto}
+    header{display:flex;align-items:center;gap:16px;margin-bottom:18px}
+    h1{font-size:20px;margin:0}
+    .card{background:var(--card);padding:16px;border-radius:12px;box-shadow:0 6px 20px rgba(2,6,23,0.6);}
+    .row{display:flex;gap:12px;align-items:center}
+    input, select, button{padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:var(--glass);color:inherit}
+    button{cursor:pointer}
+    .flex{display:flex;gap:12px}
+    .stats{display:grid;grid-template-columns:1fr 320px;gap:12px;margin-top:12px}
+    .digits-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+    .digit-box{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));padding:12px;border-radius:8px;text-align:center}
+    .digit{font-size:24px;font-weight:700}
+    .count{font-size:14px;color:var(--muted)}
+    canvas{background:transparent}
+    footer{margin-top:16px;color:var(--muted);font-size:13px}
+    .warning{color:#ffdede;background:#4b1b1b;padding:8px;border-radius:8px}
+    .controls{display:flex;gap:8px;flex-wrap:wrap}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="card" style="display:flex;align-items:center;gap:12px;padding:12px 16px">
+        <div style="width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#f59e0b);display:flex;align-items:center;justify-content:center;font-weight:800;color:#061124">@F</div>
+        <div>
+          <h1>@Flexin Tool — Digit Matches Scanner</h1>
+          <div style="font-size:13px;color:var(--muted)">Scans last digit of live ticks and shows distribution & probability-based suggestion.</div>
+        </div>
+      </div>
+    </header>
+
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+        <div class="row">
+          <label style="font-size:13px;color:var(--muted);margin-right:8px">API token</label>
+          <input id="token" placeholder="Paste your Deriv API token here (kept locally)" style="width:420px" />
+        </div>
+
+        <div class="row">
+          <label style="font-size:13px;color:var(--muted);margin-right:8px">Symbol</label>
+          <select id="symbol">
+            <option value="R_10">R_10</option>
+            <option value="R_25">R_25</option>
+            <option value="R_50">R_50</option>
+            <option value="R_100" selected>R_100 (commonly used)</option>
+            <option value="R_75">R_75</option>
+          </select>
+          <label style="font-size:13px;color:var(--muted);margin-left:12px">History</label>
+          <input id="history" type="number" min="10" max="1000" value="100" style="width:90px;margin-left:6px" />
+        </div>
+
+        <div class="controls">
+          <button id="connectBtn">Connect</button>
+          <button id="disconnectBtn" disabled>Disconnect</button>
+          <button id="clearBtn">Clear History</button>
+        </div>
+      </div>
+
+      <div style="margin-top:12px;display:grid;grid-template-columns:1fr 260px;gap:12px">
+        <div class="card" style="padding:12px">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <div style="font-size:13px;color:var(--muted)">Last digit</div>
+              <div id="lastDigit" style="font-size:48px;font-weight:800">–</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:13px;color:var(--muted)">Suggested next digit (Flexin)</div>
+              <div id="suggestion" style="font-size:20px;font-weight:700">–</div>
+            </div>
+          </div>
+
+          <hr style="margin:12px 0;border:none;border-top:1px solid rgba(255,255,255,0.04)" />
+
+          <div style="display:flex;gap:12px;align-items:center">
+            <div style="flex:1">
+              <canvas id="barChart" width="640" height="140"></canvas>
+            </div>
+            <div style="width:160px">
+              <div style="font-size:13px;color:var(--muted)">Last seen</div>
+              <div id="lastSeen" style="margin-top:8px;color:var(--muted)">—</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="padding:12px">
+          <div style="font-size:13px;color:var(--muted)">Digit distribution (last <span id="histLabel">100</span> ticks)</div>
+          <div style="margin-top:8px" class="digits-grid" id="digitsGrid">
+            <!-- digit boxes go here -->
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:12px">
+        <div class="warning">Important: Do NOT paste your token into public chats. Keep it private. This page stores the token only locally in your browser session and does not send it anywhere else.</div>
+      </div>
+
+      <footer>
+        <div style="margin-top:12px;font-size:13px;color:var(--muted)">How it works: the tool connects to Deriv's WebSocket, reads each tick's <em>quote</em>, extracts the last digit and keeps a rolling history. The "suggestion" is the digit with the highest frequency in the chosen window (a probability-based hint, not a guarantee).</div>
+      </footer>
+    </div>
+  </div>
+
+  <script>
+    // Minimal front-end Flexin: connects to Deriv WebSocket v3
+    let ws = null;
+    let tokenInput = document.getElementById('JFMRo2gVJGiGMp4');
+    let connectBtn = document.getElementById('connectBtn');
+    let disconnectBtn = document.getElementById('disconnectBtn');
+    let clearBtn = document.getElementById('clearBtn');
+    let symbolSelect = document.getElementById('symbol');
+    let lastDigitEl = document.getElementById('lastDigit');
+    let suggestionEl = document.getElementById('suggestion');
+    let digitsGrid = document.getElementById('digitsGrid');
+    let historyInput = document.getElementById('history');
+    let histLabel = document.getElementById('histLabel');
+    let lastSeenEl = document.getElementById('lastSeen');
+    let barCanvas = document.getElementById('barChart');
+    let barCtx = barCanvas.getContext('2d');
+
+    let history = []; // rolling history of last N digits
+
+    function renderDigits() {
+      const n = parseInt(historyInput.value || 100, 10);
+      histLabel.textContent = n;
+      // counts
+      const counts = Array.from({length:10}, ()=>0);
+      for (const d of history) counts[d]++;
+
+      // update grid
+      digitsGrid.innerHTML = '';
+      for (let i=0;i<10;i++){
+        const box = document.createElement('div');
+        box.className = 'digit-box';
+        box.innerHTML = `<div class="digit">${i}</div><div class="count">${counts[i]} (${((counts[i]/Math.max(1,history.length))*100).toFixed(1)}%)</div>`;
+        digitsGrid.appendChild(box);
+      }
+
+      // render bar chart
+      drawBarChart(counts, n);
+
+      // suggestion: most common digit in window
+      let suggestion = '-';
+      if (history.length>0) {
+        let maxIdx = 0;
+        for (let i=1;i<10;i++) if (counts[i] > counts[maxIdx]) maxIdx = i;
+        suggestion = maxIdx;
+      }
+      suggestionEl.textContent = suggestion;
+    }
+
+    function drawBarChart(counts, windowSize){
+      const ctx = barCtx;
+      const w = barCanvas.width; const h = barCanvas.height;
+      ctx.clearRect(0,0,w,h);
+      const padding = 10;
+      const barWidth = (w - padding*2) / 10 - 6;
+      const maxCount = Math.max(1, ...counts);
+      for (let i=0;i<10;i++){
+        const x = padding + i*(barWidth+6);
+        const barH = (counts[i] / Math.max(1, windowSize)) * (h - 30);
+        const y = h - barH - 20;
+        // bar
+        ctx.fillStyle = 'rgba(249,115,22,0.95)';
+        ctx.fillRect(x, y, barWidth, barH);
+        // label
+        ctx.fillStyle = '#9ca3af';
+        ctx.font = '12px sans-serif';
+        ctx.fillText(i, x + barWidth/2 - 4, h - 6);
+      }
+    }
+
+    function addDigit(d){
+      const n = parseInt(historyInput.value || 100, 10);
+      history.push(d);
+      while(history.length > n) history.shift();
+      lastDigitEl.textContent = d;
+      lastSeenEl.textContent = new Date().toLocaleTimeString();
+      renderDigits();
+    }
+
+    connectBtn.addEventListener('click', ()=>{
+      const token = tokenInput.value.trim();
+      if(JFMRo2gVJGiGMp4){alert('Please paste your Deriv API token into the API token field (JFMRo2gVJGiGMp4).');return}
+      const symbol = symbolSelect.value;
+      connectBtn.disabled = true;
+      tokenInput.disabled = true;
+      symbolSelect.disabled = true;
+      historyInput.disabled = true;
+
+      ws = new WebSocket('wss://ws.derivws.com/websockets/v3?app_id=1089');
+      ws.onopen = ()=>{
+        // authorize
+        ws.send(JSON.stringify({authorize: token}));
+      };
+      ws.onmessage = (evt)=>{
+        try{
+          const data = JSON.parse(evt.data);
+          if(data.error){console.warn('WS error', data)}
+
+          // after authorize, subscribe to ticks
+          if(data.authorize){
+            // subscribe to ticks for the selected symbol
+            ws.send(JSON.stringify({ticks: symbol, subscribe: 1}));
+          }
+
+          // handle tick data
+          if(data.tick && data.tick.quote!==undefined){
+            const q = data.tick.quote;
+            // ensure string then take last char of integer portion
+            const s = String(q);
+            // some quotes might be floats with many decimals; we just take last char before decimal or last digit of integer/float
+            let lastChar = s[s.length-1];
+            // if last char is 0-9 it's fine; otherwise try alternative
+            if(!/\d/.test(lastChar)){
+              // fallback: take last digit from integer part
+              const intPart = Math.floor(q).toString();
+              lastChar = intPart[intPart.length-1];
+            }
+            const digit = parseInt(lastChar,10);
+            if(!isNaN(digit)) addDigit(digit);
+          }
+        }catch(e){console.error('parse error', e)}
+      };
+
+      ws.onclose = ()=>{
+        console.log('WS closed');
+        connectBtn.disabled = false;
+        disconnectBtn.disabled = true;
+        tokenInput.JFMRo2gVJGiGMp4 = true;
+        symbolSelect.abled = true;
+        historyInput.abled = true;
+      };
+
+      ws.onerror = (e)=>{console.error('WS error', e)};
+
+      disconnectBtn.disabled = false;
+    });
+
+    disconnectBtn.addEventListener('click', ()=>{
+      if(ws) ws.close();
+      ws = null;
+      connectBtn.disabled = false;
+      disconnectBtn.disabled = true;
+      tokenInput.JFMRo2gVJGiGMp4 = true;
+      symbolSelect.abled = true;
+      historyInput.disabled = false;
+    });
+
+    clearBtn.addEventListener('click', ()=>{
+      history = [];
+      lastDigitEl.textContent = '–';
+      suggestionEl.textContent = '–';
+      lastSeenEl.textContent = '—';
+      renderDigits();
+    });
+
+    // initial render
+    renderDigits();
+  </script>
+</body>
+</html>
